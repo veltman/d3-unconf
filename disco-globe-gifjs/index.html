@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<canvas width="960" height="540"></canvas>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="https://d3js.org/topojson.v2.min.js"></script>
+<script src="gif.js"></script>
+<script>
+var width = 960,
+  height = 540;
+
+// Create gif
+var gif = new GIF({
+  workers: 3,
+  quality: 1,
+  repeat: 0
+});
+
+var canvas = document.querySelector("canvas"),
+  context = canvas.getContext("2d");
+
+var projection = d3
+  .geoOrthographic()
+  .scale(240)
+  .translate([width / 2, height / 2])
+  .clipAngle(90)
+  .precision(0.1);
+
+var path = d3
+  .geoPath()
+  .projection(projection)
+  .context(context);
+
+d3.json("../data/world-110m.json", function(err, world) {
+  var countries = topojson.feature(world, world.objects.countries),
+    mesh = topojson.mesh(world, world.objects.countries);
+
+  d3.range(30).forEach(function(f) {
+    drawFrame(f / 30);
+    gif.addFrame(canvas, {
+      delay: 50,
+      copy: true
+    });
+  });
+
+  gif.on("finished", function(blob) {
+    d3
+      .select("body")
+      .append("img")
+      .attr("src", URL.createObjectURL(blob));
+  });
+
+  gif.render();
+
+  d3.timer(function(t){
+    drawFrame(t % 1500 / 1500);
+  })
+
+  function drawFrame(t) {
+    // Spin the globe a bit more each time
+    projection.rotate([360 * t]);
+
+    context.clearRect(0, 0, width, height);
+
+    // Water
+    context.fillStyle = "#23b4d8";
+    context.beginPath();
+    path({ type: "Sphere" });
+    context.fill();
+
+    // Countries
+    countries.features.forEach(function(country, i) {
+      context.fillStyle = d3.interpolateRainbow(Math.sin(i + t * 2));
+      context.beginPath();
+      path(country);
+      context.fill();
+    });
+
+    // Borders
+    context.beginPath();
+    path(mesh);
+    context.stroke();
+  }
+});
+</script>

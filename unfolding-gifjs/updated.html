@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      background-color: #ccc;
+    }
+
+    path {
+      stroke: black;
+      stroke-width: 3px;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      fill: #fff;
+    }
+
+    path:last-of-type {
+      stroke-width: 1px;
+      fill: none;
+    }
+  </style>
+</head>
+<body>
+  <svg width="960" height="500"></svg>
+<script src="https://d3js.org/d3.v4.min.js"></script>
+<script src="gif.js"></script>
+<script>
+
+var width = 960,
+    height = 500,
+    sides = d3.scaleLinear().range([1, 12]),
+    svg = d3.select("svg").append("g").attr("transform", "translate(" + width / 2 + ")"),
+    line = d => "M" + d.join("L") + "Z",
+    path = svg.append("path"),
+    inner = svg.append("path");
+
+svg.append(function(){ return document.querySelector("style"); });
+
+// Create gif
+var gif = new GIF({
+  workers: 2,
+  quality: 1,
+  repeat: 0
+});
+
+var frameQueue = d3.queue(1);
+
+d3.range(30).forEach(function(t){
+  frameQueue.defer(drawFrame, t / 30);
+});
+
+frameQueue.await(function(){
+  gif.on("finished", function(blob) {
+    d3
+      .select("body")
+      .append("img")
+      .attr("src", URL.createObjectURL(blob));
+  });
+  gif.render();
+});
+
+function drawFrame(t, cb) {
+
+  var out = t < 0.5,
+      progress = sides(d3.easeSinInOut(Math.min(t, 1 - t) * 2)),
+      start = poly(out ? Math.floor(progress) : Math.ceil(progress), out),
+      end = poly(out ? Math.ceil(progress) : Math.floor(progress), !out),
+      remainder = progress % 1;
+
+  if (!remainder) {
+    end = start;
+  }
+
+  inner.attr("d", d3.range(3, progress).map(i => line(poly(i))).join(" "));
+  path.attr("d", line(d3.interpolateArray(start, end)(out ? remainder : 1 - remainder)));
+
+  var img = new Image(),
+      serialized = new XMLSerializer().serializeToString(document.querySelector("svg")),
+      svg = new Blob([serialized], {type: "image/svg+xml"}),
+      url = URL.createObjectURL(svg);
+
+  // Onload, callback to move on to next frame
+  img.onload = function(){
+
+    gif.addFrame(img, {
+      delay: 50,
+      copy: true
+    });
+
+    cb();
+
+  };
+
+  img.src = url;
+
+}
+
+function poly(s, addPoint) {
+  var r = 120 / (2 * Math.sin(Math.PI / s)),
+      points = s === 1
+        ? [[0, 0]]
+        : d3
+            .range(s)
+            .map(i => [
+              r * Math.cos(2 * Math.PI * i / s - Math.PI / 2 - (s % 2 ? 0 : Math.PI / s)),
+              r * Math.sin(2 * Math.PI * i / s - Math.PI / 2 - (s % 2 ? 0 : Math.PI / s))
+            ]),
+      bottom = points[s > 2 ? ~~(s / 2) + 1 : 0][1];
+
+  points.forEach(d => d[1] += height - bottom - 25);
+
+  if (addPoint) {
+    if (s % 2) {
+      points.unshift(points[0]);
+    } else {
+      points.splice(1, 0, [0, points[0][1]]);
+      points.push(points.shift());
+    }
+  }
+
+  return points;
+}
+
+</script>
